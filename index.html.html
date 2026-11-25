@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TelePulse CRM - SQL Code</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1e1e1e;
+            color: white;
+            padding: 30px;
+        }
+
+        h1 {
+            color: #61dafb;
+        }
+
+        pre {
+            background: #252526;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            color: #dcdcaa;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 15px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>TelePulse CRM</h1>
+    <h2>Phase 3 - SQL DDL Code (Microsoft SQL Server)</h2>
+
+<pre><code>-- Create Database
+CREATE DATABASE TelePulseCRM;
+
+GO
+USE TelePulseCRM;
+GO
+
+
+
+
+-- Table 1: Department
+CREATE TABLE Department (
+    DepartmentID   INT NOT NULL PRIMARY KEY,
+    DepartmentName VARCHAR(100) NOT NULL UNIQUE,
+    Description    VARCHAR(255)
+);
+
+-- Table 2: Shift
+CREATE TABLE Shift (
+    ShiftID   INT NOT NULL PRIMARY KEY,
+    ShiftName VARCHAR(50) NOT NULL UNIQUE,
+    StartTime TIME NOT NULL,
+    EndTime   TIME NOT NULL
+);
+
+-- Table 3: Employee
+CREATE TABLE Employee (
+    EmployeeID   INT NOT NULL PRIMARY KEY,
+    FullName     VARCHAR(100) NOT NULL,
+    Email        VARCHAR(120) NOT NULL UNIQUE,
+    PasswordHash VARCHAR(255) NOT NULL,
+    Role         VARCHAR(30) NOT NULL CHECK (Role IN (&#x27;Agent&#x27;, &#x27;Supervisor&#x27;, &#x27;Campaign Manager&#x27;, &#x27;Admin&#x27;)),
+    Status       VARCHAR(20) NOT NULL DEFAULT &#x27;Active&#x27; CHECK (Status IN (&#x27;Active&#x27;, &#x27;Inactive&#x27;)),
+    HireDate     DATE NOT NULL,
+    DepartmentID INT NOT NULL,
+    ShiftID      INT NOT NULL,
+    SupervisorID INT,
+    FOREIGN KEY (DepartmentID) REFERENCES Department (DepartmentID) ON UPDATE CASCADE,
+    FOREIGN KEY (ShiftID) REFERENCES Shift (ShiftID) ON UPDATE CASCADE,
+    FOREIGN KEY (SupervisorID) REFERENCES Employee (EmployeeID)
+);
+
+-- Table 4: Campaign
+CREATE TABLE Campaign (
+    CampaignID        INT NOT NULL PRIMARY KEY,
+    CampaignName      VARCHAR(120) NOT NULL,
+    StartDate         DATE NOT NULL,
+    EndDate           DATE NOT NULL,
+    Budget            DECIMAL(10, 2) NOT NULL CHECK (Budget &gt;= 0),
+    TargetConversions INT NOT NULL CHECK (TargetConversions &gt;= 0),
+    Status            VARCHAR(20) NOT NULL DEFAULT &#x27;Planned&#x27;
+                      CHECK (Status IN (&#x27;Planned&#x27;, &#x27;Active&#x27;, &#x27;Paused&#x27;, &#x27;Completed&#x27;, &#x27;Cancelled&#x27;)),
+    ManagerID         INT NOT NULL,
+    CHECK (EndDate &gt;= StartDate),
+    FOREIGN KEY (ManagerID) REFERENCES Employee (EmployeeID) ON UPDATE CASCADE
+);
+
+-- Table 5: Call_Script
+CREATE TABLE Call_Script (
+    ScriptID   INT NOT NULL PRIMARY KEY,
+    Title      VARCHAR(120) NOT NULL,
+    Content    VARCHAR(MAX) NOT NULL,
+    Version    VARCHAR(20) NOT NULL DEFAULT &#x27;1.0&#x27;,
+    CampaignID INT NOT NULL,
+    FOREIGN KEY (CampaignID) REFERENCES Campaign (CampaignID) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- Table 6: Lead
+CREATE TABLE Lead (
+    LeadID          INT NOT NULL PRIMARY KEY,
+    FullName        VARCHAR(100) NOT NULL,
+    Phone           VARCHAR(25) NOT NULL UNIQUE,
+    Email           VARCHAR(120),
+    Source          VARCHAR(80),
+    LeadStatus      VARCHAR(30) NOT NULL DEFAULT &#x27;New&#x27;
+                    CHECK (LeadStatus IN (&#x27;New&#x27;, &#x27;Contacted&#x27;, &#x27;Interested&#x27;, &#x27;Callback&#x27;, &#x27;Converted&#x27;, &#x27;Do Not Call&#x27;)),
+    AssignedAgentID INT,
+    AssignedDate    DATE,
+    FOREIGN KEY (AssignedAgentID) REFERENCES Employee (EmployeeID) ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- Table 7: Campaign_Lead
+CREATE TABLE Campaign_Lead (
+    CampaignID       INT NOT NULL,
+    LeadID           INT NOT NULL,
+    AssignedDate     DATE NOT NULL DEFAULT GETDATE(),
+    UnassignedDate   DATE,
+    AssignmentStatus VARCHAR(20) NOT NULL DEFAULT &#x27;Active&#x27;
+                     CHECK (AssignmentStatus IN (&#x27;Active&#x27;, &#x27;Completed&#x27;, &#x27;Removed&#x27;)),
+    PRIMARY KEY (CampaignID, LeadID),
+    FOREIGN KEY (CampaignID) REFERENCES Campaign (CampaignID) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (LeadID) REFERENCES Lead (LeadID) ON DELETE CASCADE
+);
+
+-- Table 8: Call_Log
+CREATE TABLE Call_Log (
+    CallID          INT NOT NULL PRIMARY KEY,
+    CallDateTime    DATETIME NOT NULL DEFAULT GETDATE(),
+    DurationSeconds INT NOT NULL CHECK (DurationSeconds &gt;= 0),
+    CallResult      VARCHAR(30) NOT NULL
+                    CHECK (CallResult IN (&#x27;No Answer&#x27;, &#x27;Busy&#x27;, &#x27;Interested&#x27;, &#x27;Callback&#x27;, &#x27;Converted&#x27;, &#x27;Not Interested&#x27;, &#x27;Do Not Call&#x27;)),
+    Notes           VARCHAR(500),
+    LeadID          INT NOT NULL,
+    AgentID         INT NOT NULL,
+    FOREIGN KEY (LeadID) REFERENCES Lead (LeadID) ON UPDATE CASCADE,
+    FOREIGN KEY (AgentID) REFERENCES Employee (EmployeeID)
+);
+
+-- Table 9: Follow_Up_Task
+CREATE TABLE Follow_Up_Task (
+    TaskID          INT NOT NULL PRIMARY KEY,
+    DueDateTime     DATETIME NOT NULL,
+    TaskStatus      VARCHAR(20) NOT NULL DEFAULT &#x27;Pending&#x27;
+                    CHECK (TaskStatus IN (&#x27;Pending&#x27;, &#x27;In Progress&#x27;, &#x27;Completed&#x27;, &#x27;Overdue&#x27;, &#x27;Cancelled&#x27;)),
+    Notes           VARCHAR(500),
+    CallID          INT NOT NULL,
+    AssignedAgentID INT NOT NULL,
+    FOREIGN KEY (CallID) REFERENCES Call_Log (CallID) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (AssignedAgentID) REFERENCES Employee (EmployeeID)
+);
+
+-- Table 10: Quality_Evaluation
+CREATE TABLE Quality_Evaluation (
+    EvaluationID   INT NOT NULL PRIMARY KEY,
+    Score          INT NOT NULL CHECK (Score BETWEEN 0 AND 100),
+    EvaluationDate DATETIME NOT NULL DEFAULT GETDATE(),
+    Comments       VARCHAR(500),
+    CallID         INT NOT NULL,
+    SupervisorID   INT NOT NULL,
+    FOREIGN KEY (CallID) REFERENCES Call_Log (CallID) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (SupervisorID) REFERENCES Employee (EmployeeID)
+);
+
+-- Table 11: Product_Category
+CREATE TABLE Product_Category (
+    CategoryID   INT NOT NULL PRIMARY KEY,
+    CategoryName VARCHAR(100) NOT NULL UNIQUE,
+    Description  VARCHAR(255)
+);
+
+-- Table 12: Product
+CREATE TABLE Product (
+    ProductID   INT NOT NULL PRIMARY KEY,
+    ProductName VARCHAR(120) NOT NULL,
+    Description VARCHAR(255),
+    UnitPrice   DECIMAL(10, 2) NOT NULL CHECK (UnitPrice &gt;= 0),
+    CategoryID  INT NOT NULL,
+    FOREIGN KEY (CategoryID) REFERENCES Product_Category (CategoryID) ON UPDATE CASCADE
+);
+
+-- Table 13: Sales_Order
+CREATE TABLE Sales_Order (
+    OrderID     INT NOT NULL PRIMARY KEY,
+    OrderDate   DATETIME NOT NULL DEFAULT GETDATE(),
+    OrderStatus VARCHAR(20) NOT NULL DEFAULT &#x27;Pending&#x27;
+                CHECK (OrderStatus IN (&#x27;Pending&#x27;, &#x27;Confirmed&#x27;, &#x27;Completed&#x27;, &#x27;Cancelled&#x27;)),
+    LeadID      INT NOT NULL,
+    AgentID     INT NOT NULL,
+    FOREIGN KEY (LeadID) REFERENCES Lead (LeadID) ON UPDATE CASCADE,
+    FOREIGN KEY (AgentID) REFERENCES Employee (EmployeeID)
+);
+
+-- Table 14: Order_Item (Weak Entity with Composite Key OrderID + ItemNo)
+CREATE TABLE Order_Item (
+    OrderID   INT NOT NULL,
+    ItemNo    INT NOT NULL CHECK (ItemNo &gt; 0),
+    ProductID INT NOT NULL,
+    Quantity  INT NOT NULL CHECK (Quantity &gt; 0),
+    UnitPrice DECIMAL(10, 2) NOT NULL CHECK (UnitPrice &gt;= 0),
+    Discount  DECIMAL(5, 2) NOT NULL DEFAULT 0.00 CHECK (Discount BETWEEN 0 AND 100),
+    PRIMARY KEY (OrderID, ItemNo),
+    FOREIGN KEY (OrderID) REFERENCES Sales_Order (OrderID) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (ProductID) REFERENCES Product (ProductID) ON UPDATE CASCADE
+);
+
+-- Table 15: Invoice (1:1 with Sales_Order -&gt; OrderID is UNIQUE)
+CREATE TABLE Invoice (
+    InvoiceID     INT NOT NULL PRIMARY KEY,
+    InvoiceDate   DATE NOT NULL DEFAULT GETDATE(),
+    DueDate       DATE NOT NULL,
+    TotalAmount   DECIMAL(10, 2) NOT NULL CHECK (TotalAmount &gt;= 0),
+    InvoiceStatus VARCHAR(20) NOT NULL DEFAULT &#x27;Unpaid&#x27;
+                  CHECK (InvoiceStatus IN (&#x27;Unpaid&#x27;, &#x27;Partially Paid&#x27;, &#x27;Paid&#x27;, &#x27;Overdue&#x27;, &#x27;Cancelled&#x27;)),
+    OrderID       INT NOT NULL UNIQUE,
+    CHECK (DueDate &gt;= InvoiceDate),
+    FOREIGN KEY (OrderID) REFERENCES Sales_Order (OrderID) ON UPDATE CASCADE
+);
+
+-- Table 16: Payment
+CREATE TABLE Payment (
+    PaymentID     INT NOT NULL PRIMARY KEY,
+    PaymentDate   DATETIME NOT NULL DEFAULT GETDATE(),
+    Amount        DECIMAL(10, 2) NOT NULL CHECK (Amount &gt; 0),
+    PaymentMethod VARCHAR(30) NOT NULL
+                  CHECK (PaymentMethod IN (&#x27;Cash&#x27;, &#x27;Credit Card&#x27;, &#x27;Debit Card&#x27;, &#x27;Bank Transfer&#x27;, &#x27;Mobile Wallet&#x27;)),
+    PaymentStatus VARCHAR(20) NOT NULL DEFAULT &#x27;Completed&#x27;
+                  CHECK (PaymentStatus IN (&#x27;Pending&#x27;, &#x27;Completed&#x27;, &#x27;Failed&#x27;, &#x27;Refunded&#x27;)),
+    InvoiceID     INT NOT NULL,
+    FOREIGN KEY (InvoiceID) REFERENCES Invoice (InvoiceID) ON DELETE CASCADE ON UPDATE CASCADE
+);
+</code></pre>
+
+</body>
+</html>
